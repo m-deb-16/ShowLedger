@@ -32,7 +32,9 @@ router.post("/", authMiddleware, async (req, res) => {
   //post cuz adding show to watchlist, '/' → means the URL will be /api/watchlist, authMiddleware → checks token, sets req.user
   //'/' here and not the actual route cuz this is just he definition/logic of the route for this section, the global routing is set in the index folder
   try {
-    const { showId, status, rating } = req.body; //Destructure from body → user sends { showId, status, rating } in JSON (how)
+    // const { showId, status, rating } = req.body; //Destructure from body → user sends { showId, status, rating } in JSON (how)
+
+    const { showId, status } = req.body;
 
     //Check if this user already added this show, req.user → userId set by JWT middleware
     const exists = await Watchlist.findOne({
@@ -102,24 +104,96 @@ router.delete("/:id", authMiddleware, async (req, res) => {
   }
 });
 
-router.put("/:id", authMiddleware, async (req, res) => {
-  //put for updating status or rating
+// router.put("/:id", authMiddleware, async (req, res) => {
+//   //put for updating status or rating
+//   try {
+//     //why not just send the id in body as well instead of sending via params
+//     const id = req.params.id;
+//     const { status, rating } = req.body;
+
+//     const updated = await Watchlist.findOneAndUpdate(
+//       { _id: id, userId: req.user },
+//       { status, rating },
+//       { new: true }
+//     );
+
+//     if (!updated) {
+//       return res.status(404).json({ message: "Item not found" });
+//     }
+
+//     res.json(updated);
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: "Server error" });
+//   }
+// });
+
+router.put("/", authMiddleware, async (req, res) => {
   try {
-    //why not just send the id in body as well instead of sending via params
-    const id = req.params.id;
-    const { status, rating } = req.body;
+    const { showId, status, rating } = req.body;
 
-    const updated = await Watchlist.findOneAndUpdate(
-      { _id: id, userId: req.user },
-      { status, rating },
-      { new: true }
-    );
-
-    if (!updated) {
-      return res.status(404).json({ message: "Item not found" });
+    if (!showId || !status) {
+      return res.status(400).json({ message: "showId and status required" });
     }
 
-    res.json(updated);
+    const update = { status };
+
+    if (status === "watched" && rating) {
+      update.rating = rating;
+    } else {
+      update.rating = undefined;
+    }
+
+    const updated = await Watchlist.findOneAndUpdate(
+      { userId: req.user, showId },
+      update,
+      { upsert: true, new: true }
+    );
+
+    res.json({ message: "Watchlist updated", data: updated });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+router.put("/", authMiddleware, async (req, res) => {
+  try {
+    const { showId, status, rating } = req.body;
+    if (!showId || !status) {
+      return res.status(400).json({ message: "showId and status required" });
+    }
+
+    const updated = await Watchlist.findOneAndUpdate(
+      { userId: req.user, showId },
+      { status },
+      { rating },
+      { upsert: true, new: true } // upsert = create if not exists
+    );
+
+    res.json({ message: "Watchlist updated", data: updated });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+router.get("/show/:showId", authMiddleware, async (req, res) => {
+  try {
+    const entry = await Watchlist.findOne({
+      userId: req.user,
+      showId: req.params.showId,
+    });
+
+    if (!entry) {
+      return res.status(404).json({ message: "Not in watchlist" });
+    }
+
+    res.json({
+      showId: entry.showId,
+      status: entry.status,
+      rating: entry.rating || null,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
